@@ -41,10 +41,16 @@ class Chef;
 class Customer;
 
 Cell *kitchen[BOARD_WIDTH][BOARD_HEIGHT];
+Cell *window;
+Cell *dish;
+Cell *blueBerries;
+Cell *iceCream;
+Cell *strawBerries;
+Cell *choppingBoard;
 Chef *playerChef;
 Chef *opponent1Chef;
 Chef *opponent2Chef;
-vector<Customer*> customers;
+vector<Customer *> customers;
 
 int manhattanDistance(int x1, int y1, int x2, int y2) {
     return abs(x2 - x1) + abs(y2 - y1);
@@ -97,7 +103,7 @@ public:
 
     Cell *getNearestOfType(char type) {
         int distance = INFINITY;
-        Cell *nearest = this;
+        Cell *nearest = nullptr;
 
         for (int y = 0; y < BOARD_HEIGHT; y++) {
             for (int x = 0; x < BOARD_WIDTH; x++) {
@@ -107,6 +113,34 @@ public:
                 }
 
                 if (kitchen[x][y]->type == type && kitchen[x][y]->item == "NONE") {
+                    int d = manhattanDistance(this->x, this->y, kitchen[x][y]->x, kitchen[x][y]->y);
+
+                    if (d < distance) {
+                        distance = d;
+                        nearest = kitchen[x][y];
+                    }
+                }
+            }
+        }
+
+        return nearest;
+    }
+
+    Cell *getNearestOfItem(string item) {
+        int distance = INFINITY;
+        Cell *nearest = nullptr;
+
+        for (int y = 0; y < BOARD_HEIGHT; y++) {
+            for (int x = 0; x < BOARD_WIDTH; x++) {
+                // Visiting itself doesn't count
+                if (this->x == x && this->y == y) {
+                    continue;
+                }
+
+                size_t found = kitchen[x][y]->item.find(item);
+
+                // DISH-BLUEBERRIES MATCH DISH | BLUEBERRIES | DISH-BLUEBERRIES
+                if (kitchen[x][y]->item == item || found != string::npos) {
                     int d = manhattanDistance(this->x, this->y, kitchen[x][y]->x, kitchen[x][y]->y);
 
                     if (d < distance) {
@@ -132,6 +166,8 @@ public:
     Chef(int x, int y, const string &item) : Position(x, y) {
         this->item = item;
     }
+
+    Cell *nextItemToPick(Customer *customer);
 };
 
 class Customer {
@@ -145,14 +181,92 @@ public:
     }
 };
 
-Cell *getKitchenCell(char type) {
-    for (int y = 0; y < BOARD_HEIGHT; y++) {
-        for (int x = 0; x < BOARD_WIDTH; x++) {
-            if (kitchen[x][y]->type == type) {
-                return kitchen[x][y];
+Customer *getBestCustomer() {
+    int index = 0;
+    int award = 0;
+
+    for (int i = 0; i < customers.size(); i++) {
+        if (customers[i]->award > award) {
+            award = customers[i]->award;
+            index = i;
+        }
+    }
+
+    return customers[index];
+}
+
+Cell *Chef::nextItemToPick(Customer *customer) {
+    // We deliver to the window if we have all the items needed
+    if (this->item == customer->item) {
+        return window;
+    }
+
+    // If chef doesn't have a dish
+    // Check if a dish is already present on any table
+    // Or if a dish is present at the dishwasher and is closer, take it
+    if (this->item.find("DISH") == -1) {
+        auto *nearestDishItem = kitchen[this->x][this->y]->getNearestOfItem("DISH");
+
+        if (nearestDishItem != nullptr) {
+            return nearestDishItem;
+        } else {
+            return dish;
+        }
+    }
+
+    if (this->item.find("STRAWBERRIES")) {
+        return choppingBoard;
+    }
+
+    // TODO : BE GENERIC WITH THE ITEM TYPES
+
+    size_t blueBerriesPos = customer->item.find("BLUEBERRIES");
+    size_t iceCreamPos = customer->item.find("ICE_CREAM");
+    size_t choppedStrawBerriesPos = customer->item.find("CHOPPED_STRAWBERRIES");
+
+    if (blueBerriesPos < iceCreamPos) {
+        if (this->item.find("BLUEBERRIES") == -1) {
+            auto *nearestBlueBerryItem = kitchen[this->x][this->y]->getNearestOfItem("BLUEBERRIES");
+
+            if (nearestBlueBerryItem != nullptr) {
+                return nearestBlueBerryItem;
+            } else {
+                return blueBerries;
+            }
+        }
+
+        if (this->item.find("ICE_CREAM") == -1) {
+            auto *nearestIceCreamItem = kitchen[this->x][this->y]->getNearestOfItem("ICE_CREAM");
+
+            if (nearestIceCreamItem != nullptr) {
+                return nearestIceCreamItem;
+            } else {
+                return iceCream;
+            }
+        }
+    } else {
+        if (this->item.find("ICE_CREAM") == -1) {
+            auto *nearestIceCreamItem = kitchen[this->x][this->y]->getNearestOfItem("ICE_CREAM");
+
+            if (nearestIceCreamItem != nullptr) {
+                return nearestIceCreamItem;
+            } else {
+                return iceCream;
+            }
+        }
+
+        if (this->item.find("BLUEBERRIES") == -1) {
+            auto *nearestBlueBerryItem = kitchen[this->x][this->y]->getNearestOfItem("BLUEBERRIES");
+
+            if (nearestBlueBerryItem != nullptr) {
+                return nearestBlueBerryItem;
+            } else {
+                return blueBerries;
             }
         }
     }
+
+    return dish;
 }
 
 int main() {
@@ -180,8 +294,31 @@ int main() {
 
         for (int j = 0; j < BOARD_WIDTH; j++) {
             kitchen[j][i] = new Cell(j, i, kitchenLine[j]);
+
+            if (kitchen[j][i]->type == 'W') {
+                window = kitchen[j][i];
+            } else if (kitchen[j][i]->type == 'D') {
+                dish = kitchen[j][i];
+            } else if (kitchen[j][i]->type == 'B') {
+                blueBerries = kitchen[j][i];
+            } else if (kitchen[j][i]->type == 'I') {
+                iceCream = kitchen[j][i];
+            } else if (kitchen[j][i]->type == 'S') {
+                strawBerries = kitchen[j][i];
+            } else if (kitchen[j][i]->type == 'C') {
+                choppingBoard = kitchen[j][i];
+            }
         }
     }
+
+//    cerr << endl;
+//    for (int y = 0; y < BOARD_HEIGHT; y++) {
+//        for (int x = 0; x < BOARD_WIDTH; x++) {
+//            cerr << kitchen[x][y]->type;
+//        }
+//
+//        cerr << endl;
+//    }
 
     playerChef = new Chef();
     opponent1Chef = new Chef();
@@ -192,6 +329,7 @@ int main() {
         int turnsRemaining;
         cin >> turnsRemaining;
         cin.ignore();
+        start = NOW;
 
         int playerX;
         int playerY;
@@ -258,19 +396,14 @@ int main() {
             customers[i]->award = customerAward;
         }
 
-        // MOVE x y
-        // USE x y
-        // WAIT
-        if (playerChef->item.find("DISH") == -1) {
-            auto *dishCell = getKitchenCell('D');
-            cout << "USE " << dishCell->x << " " << dishCell->y << endl;
-        } else if (playerChef->item.find("BLUEBERRIES") == -1) {
-            auto *blueBerriesCell = getKitchenCell('B');
-            cout << "USE " << blueBerriesCell->x << " " << blueBerriesCell->y << endl;
-        } else {
-            auto *nearestEmptyTable = kitchen[playerChef->x][playerChef->y]->getNearestOfType('#');
-            cout << "USE " << nearestEmptyTable->x << " " << nearestEmptyTable->y << endl;
-        }
+        // *************************************************************************************************************
+        // GAME LOGIC
+        // *************************************************************************************************************
+
+        auto *bestCustomer = getBestCustomer();
+        auto *nextCell = playerChef->nextItemToPick(bestCustomer);
+
+        cout << "USE " << nextCell->x << " " << nextCell->y << endl;
 
         if (turnsRemaining == 0) {
             currentRound++;
